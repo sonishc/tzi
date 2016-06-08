@@ -1,0 +1,370 @@
+<html>
+<body>
+<script type='text/javascript'>
+
+// Adapted from an algorithm described at the URL
+// https://en.wikipedia.org/wiki/Feistel_network.
+
+// This code, as implemented, should by no means
+// be used in any secure applications!
+
+// main
+
+function main()
+{
+	//var stringToEncrypt = "One if by land, two if by sea.";
+	var stringToEncrypt = "ALLIED CIPHER MACHINES USED IN WWII INCLUDED THE BRITISH TYPEX AND THE AMERICAN SIGABA; BOTH WERE ELECTROMECHANICAL ROTOR DESIGNS SIMILAR IN SPIRIT TO THE ENIGMA, ALBEIT WITH MAJOR IMPROVEMENTS. NEITHER IS KNOWN TO HAVE BEEN BROKEN BY ANYONE DURING THE WAR. THE POLES USED THE LACIDA MACHINE, BUT ITS SECURITY WAS FOUND TO BE LESS THAN INTENDED BY POLISH ARMY CRYPTOGRAPHERS IN THE UK, AND ITS USE WAS DISCONTINUED. US TROOPS IN THE FIELD USED THE M- AND THE STILL LESS SECURE M- FAMILY MACHINES. BRITISH SOE AGENTS INITIALLY USED 'POEM CIPHERS' MEMORIZED POEMS WERE THE ENCRYPTION-DECRYPTION KEYS, BUT LATER IN THE WAR, THEY BEGAN TO SWITC";
+
+	write("stringToEncrypt is: " + stringToEncrypt);
+
+	var bytesToEncrypt = ByteHelper.stringUTF8ToBytes
+	(
+		stringToEncrypt
+	);
+
+	write
+	(
+		"<br>bytesToEncrypt is: " 
+		+ ByteHelper.bytesToStringHexadecimal
+		(
+			bytesToEncrypt
+		)
+	);
+
+	var keySizeInBits = 32;
+
+	var key = Math.floor
+	(	
+		Math.random()
+		* (Math.pow(2, keySizeInBits) - 1)
+	);
+
+	write("<br>key is (Ключ): " + key);
+
+	var encryptor = new EncryptorFeistel
+	(
+		key,
+		EncryptorFeistel.deriveRoundSubkeysFromKeySimple,
+		EncryptorFeistel.encryptionFunctionForRoundSimple
+	);
+
+	var bytesEncrypted = encryptor.encryptBytes(bytesToEncrypt);
+
+	write
+	(
+		"<br>bytesEncrypted is (Зашифрований): " 
+		+ ByteHelper.bytesToStringHexadecimal
+		(
+			bytesEncrypted
+		)
+	);
+
+	var bytesDecrypted = encryptor.decryptBytes(bytesEncrypted);
+
+	write
+	(
+		"<br>bytesDecrypted is (Розшифрований): " 
+		+ ByteHelper.bytesToStringHexadecimal
+		(
+			bytesDecrypted
+		)
+	);
+
+	var stringDecrypted = ByteHelper.bytesToStringUTF8
+	(
+		bytesDecrypted
+	);
+
+	write("<br>stringDecrypted is (Розшифрований): " + stringDecrypted);
+}
+
+function write(message)
+{
+	document.write(message + "<br />");
+}
+
+// classes
+
+Array.prototype.overwriteWith = function(other)
+{
+	this.length = 0;
+
+	for (var i = 0; i < other.length; i++)
+	{
+		this[i] = other[i];
+	}
+}
+
+function ByteHelper()
+{}
+{
+	ByteHelper.BitsPerByte = 8;
+	ByteHelper.BitsPerNibble = ByteHelper.BitsPerByte / 2;
+	ByteHelper.ByteValueMax = Math.pow(2, ByteHelper.BitsPerByte) - 1;
+
+	ByteHelper.bytesToStringUTF8 = function(bytesToConvert)
+	{
+		var returnValue = "";
+
+		for (var i = 0; i < bytesToConvert.length; i++)
+		{
+			var charCode = bytesToConvert[i];
+			var character = String.fromCharCode(charCode);
+			returnValue += character;
+		}
+
+		return returnValue;
+	}
+
+	ByteHelper.bytesToStringHexadecimal = function(bytesToConvert)
+	{
+		var returnValue = "";
+
+		var bitsPerNibble = ByteHelper.BitsPerNibble;
+
+		for (var i = 0; i < bytesToConvert.length; i++)
+		{
+			var byte = bytesToConvert[i];
+
+			for (var d = 1; d >= 0; d--)
+			{
+				var digitValue = byte >> (bitsPerNibble * d) & 0xF;
+				var digitString = "";
+				digitString += (digitValue < 10 ? digitValue : String.fromCharCode(55 + digitValue));
+				returnValue += digitString;
+			}
+
+			returnValue += " ";
+		}
+
+		return returnValue;
+	}
+
+	ByteHelper.bytesToNumber = function(bytes)
+	{
+		var returnValue = 0;
+
+		var bitsPerByte = ByteHelper.BitsPerByte;
+
+		for (var i = 0; i < bytes.length; i++)
+		{
+			var byte = bytes[i];
+			var byteValue = (byte << (bitsPerByte * i));
+			returnValue += byteValue;
+		}
+
+		return returnValue;
+	}
+
+	ByteHelper.numberOfBytesNeededToStoreNumber = function(number)
+	{
+		var numberOfBitsInNumber = Math.ceil
+		(
+			Math.log(number + 1) / Math.log(2)
+		);
+
+		var numberOfBytesNeeded = Math.ceil
+		(
+			numberOfBitsInNumber 
+			/ ByteHelper.BitsPerByte
+		);
+
+		return numberOfBytesNeeded;
+	}
+
+	ByteHelper.numberToBytes = function(number, numberOfBytesToUse)
+	{
+		var returnValues = [];
+
+		if (numberOfBytesToUse == null)
+		{
+			numberOfBytesToUse = this.numberOfBytesNeededToStoreNumber
+			(
+				number
+			);
+		}
+
+		var bitsPerByte = ByteHelper.BitsPerByte;
+
+		for (var i = 0; i < numberOfBytesToUse; i++)
+		{
+			var byte = (number >> (bitsPerByte * i)) & 0xFF;
+			returnValues.push(byte);
+		}
+
+		return returnValues;
+	}
+
+	ByteHelper.stringUTF8ToBytes = function(stringToConvert)
+	{
+		var returnValues = [];
+
+		for (var i = 0; i < stringToConvert.length; i++)
+		{
+			var charCode = stringToConvert.charCodeAt(i);
+			returnValues.push(charCode);
+		}
+
+		return returnValues;
+	}
+
+	ByteHelper.xorBytesWithOthers = function(bytes0, bytes1)
+	{
+		for (var i = 0; i < bytes0.length; i++)
+		{
+			bytes0[i] ^= bytes1[i];	
+		}
+
+		return bytes0;
+	}
+}
+
+function EncryptorFeistel
+(
+	key, 
+	deriveRoundSubkeysFromKey,
+	encryptionFunctionForRound
+)
+{
+	this.key = key;
+	this.deriveRoundSubkeysFromKey = deriveRoundSubkeysFromKey;
+	this.encryptionFunctionForRound = encryptionFunctionForRound;
+}
+{
+	// static methods
+
+	EncryptorFeistel.deriveRoundSubkeysFromKeySimple = function(keyAs32BitInteger)
+	{
+		var returnValues = [];
+
+		for (var r = 0; r < 4; r++)
+		{
+			var subkeyForRound = 
+			(
+				keyAs32BitInteger
+				>> (r * ByteHelper.BitsPerByte)
+			) 
+			& 0xFF;
+
+			returnValues.push(subkeyForRound);
+		}
+
+		return returnValues;
+	}
+
+
+	EncryptorFeistel.encryptionFunctionForRoundSimple = function(right, key)
+	{
+		// Simple, and presumably easy to crack.
+
+		for (var i = 0; i < right.length; i++)
+		{
+			right[i] = 
+				(right[i] + key) 
+				% ByteHelper.ByteValueMax;
+
+		}
+	}
+	
+	// instance methods
+
+
+	EncryptorFeistel.prototype.decryptBytes = function(bytesToDecrypt)
+	{
+		var returnValues = this.encryptOrDecryptBytes
+		(
+			bytesToDecrypt,
+			true // decryptRatherThanEncrypt
+		);
+
+		return returnValues;		
+	}
+
+	EncryptorFeistel.prototype.encryptBytes = function(bytesToEncrypt)
+	{
+		if (bytesToEncrypt.length % 2 == 1)
+		{
+			// hack - length must be even!
+			bytesToEncrypt.push(0);
+		}
+
+		var returnValues = this.encryptOrDecryptBytes
+		(
+			bytesToEncrypt,
+			false // decryptRatherThanEncrypt
+		);
+
+		return returnValues;
+	}
+
+	EncryptorFeistel.prototype.encryptOrDecryptBytes = function
+	(
+		bytesToEncryptOrDecrypt,
+		decryptRatherThanEncrypt
+	)
+	{	
+		var subkeysForRounds = this.deriveRoundSubkeysFromKey
+		(
+			this.key
+		);
+		var numberOfRounds = subkeysForRounds.length;
+
+		var numberOfBytes = bytesToEncryptOrDecrypt.length;
+		var numberOfBytesHalf = numberOfBytes / 2;
+
+		var left = bytesToEncryptOrDecrypt.slice
+		(
+			0, numberOfBytesHalf
+		);
+		var right = bytesToEncryptOrDecrypt.slice
+		(
+			numberOfBytesHalf
+		);
+
+		var leftNext = left.slice(0);
+		var rightNext = right.slice(0);
+
+		for (var r = 0; r < numberOfRounds; r++)
+		{
+			var subkeyIndex = 
+			(
+				decryptRatherThanEncrypt 
+				? numberOfRounds - r - 1 
+				: r
+			);
+
+			var subkeyForRound = subkeysForRounds[subkeyIndex];
+
+			// Probably some needlessly inefficient calls 
+			// to overwriteWith() happening in this block.
+
+			leftNext.overwriteWith(right);
+			rightNext.overwriteWith(left);
+
+			this.encryptionFunctionForRound
+			(
+				right, subkeyForRound
+			);
+			ByteHelper.xorBytesWithOthers
+			(
+				rightNext,
+				right
+			)
+
+			left.overwriteWith(leftNext);
+			right.overwriteWith(rightNext);	
+		}
+
+		var returnValue = [].concat(right).concat(left);
+
+		return returnValue;
+	}
+}
+
+// run
+
+main();
+
+</script>
+</body>
+</html>
